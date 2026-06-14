@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  student-section:
+    image: student-section-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: student-section
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    # If the database needs to be accessed, it connects directly 
+    # using the connection string configured in the code.

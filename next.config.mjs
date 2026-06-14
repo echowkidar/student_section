@@ -6,6 +6,7 @@ const nextConfig = {
     buildActivity: false,
   },
   allowedDevOrigins: ['10.0.93.194', 'localhost'],
+  output: 'standalone',
 };
 
 export default nextConfig;
