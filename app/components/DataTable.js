@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useRef, useCallback, useEffect } from 'react';
+
 /**
  * ============================================================================
  * DATA TABLE COMPONENT
@@ -7,6 +9,7 @@
  *
  * A full-featured, dark-themed data table with:
  *  - Column-based sorting (clickable headers)
+ *  - Column resizing
  *  - Loading skeleton state
  *  - Empty state with illustration
  *  - Zebra-striped rows with hover effects
@@ -38,6 +41,43 @@ export default function DataTable({
   emptyTitle = 'No data found',
   emptySub = 'Try adjusting your filters or search query.',
 }) {
+  const [colWidths, setColWidths] = useState({});
+  const resizingCol = useRef(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleMouseDown = (e, colKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = colKey;
+    startX.current = e.clientX;
+    const th = e.target.closest('th');
+    startWidth.current = th.offsetWidth;
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (!resizingCol.current) return;
+    const diff = e.clientX - startX.current;
+    const newWidth = Math.max(50, startWidth.current + diff); // min width 50px
+    setColWidths((prev) => ({ ...prev, [resizingCol.current]: newWidth }));
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    resizingCol.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseMove]);
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
   // ── Sort handler ──────────────────────────────────────────────────────
   const handleSort = (col) => {
     if (!col.sortable || !onSort) return;
@@ -54,11 +94,11 @@ export default function DataTable({
   if (loading) {
     return (
       <div className="table-container">
-        <table className="data-table">
+        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key} style={{ width: col.width }}>
+                <th key={col.key} style={{ width: colWidths[col.key] || col.width }}>
                   {col.label}
                 </th>
               ))}
@@ -90,11 +130,11 @@ export default function DataTable({
   if (!data || data.length === 0) {
     return (
       <div className="table-container">
-        <table className="data-table">
+        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key} style={{ width: col.width }}>
+                <th key={col.key} style={{ width: colWidths[col.key] || col.width }}>
                   {col.label}
                 </th>
               ))}
@@ -113,7 +153,7 @@ export default function DataTable({
   // ── Populated table ───────────────────────────────────────────────────
   return (
     <div className="table-container">
-      <table className="data-table">
+      <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
         <thead>
           <tr>
             {columns.map((col) => (
@@ -121,16 +161,36 @@ export default function DataTable({
                 key={col.key}
                 className={sortBy === col.key ? 'sorted' : ''}
                 style={{
-                  width: col.width,
+                  width: colWidths[col.key] || col.width,
                   textAlign: col.align || 'left',
                   cursor: col.sortable ? 'pointer' : 'default',
+                  position: 'relative',
                 }}
                 onClick={() => handleSort(col)}
               >
-                {col.label}
-                {col.sortable && (
-                  <span className="sort-arrow">{getSortArrow(col.key)}</span>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '10px' }}>
+                  <span>{col.label}</span>
+                  {col.sortable && (
+                    <span className="sort-arrow" style={{ marginLeft: '4px' }}>{getSortArrow(col.key)}</span>
+                  )}
+                </div>
+                {/* Resizer Handle */}
+                <div
+                  onMouseDown={(e) => handleMouseDown(e, col.key)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: '6px',
+                    cursor: 'col-resize',
+                    zIndex: 1,
+                    backgroundColor: 'transparent',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--border-subtle)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                />
               </th>
             ))}
           </tr>
@@ -145,7 +205,13 @@ export default function DataTable({
               {columns.map((col) => (
                 <td
                   key={col.key}
-                  style={{ textAlign: col.align || 'left' }}
+                  style={{ 
+                    textAlign: col.align || 'left',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={String(row[col.key] || '')}
                 >
                   {col.render
                     ? col.render(row[col.key], row, rowIdx)
