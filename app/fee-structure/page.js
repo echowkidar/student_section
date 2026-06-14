@@ -8,6 +8,21 @@ export default function FeeStructurePage() {
   const [course, setCourse] = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        setUserRole(d.user?.role || 'user');
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        setUserRole('user');
+        setAuthChecked(true);
+      });
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -44,6 +59,33 @@ export default function FeeStructurePage() {
 
   // Get fee columns that have non-null values
   const feeColumns = heads.filter(h => feeStructure.some(r => r[h.HEAD_CODE] && parseFloat(r[h.HEAD_CODE]) > 0));
+
+  if (!authChecked) {
+    return (
+      <div className="page-header">
+        <h1>💰 Fee Structure</h1>
+        <p>Checking access rights...</p>
+      </div>
+    );
+  }
+
+  if (userRole !== 'admin' && userRole !== 'sub admin' && userRole !== 'sub_admin') {
+    return (
+      <div>
+        <div className="page-header">
+          <h1>💰 Fee Structure</h1>
+          <p>View and compare fee structures for all courses</p>
+        </div>
+        <div className="glass-card" style={{ padding: 'var(--space-8)', textAlign: 'center', marginTop: 'var(--space-6)' }}>
+          <div style={{ fontSize: '48px', marginBottom: 'var(--space-4)' }}>🚫</div>
+          <h2 style={{ color: 'var(--accent-rose)', marginBottom: 'var(--space-4)' }}>Access Denied</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Only Administrators and Sub-Administrators can access the Fee Structure.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>

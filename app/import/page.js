@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function ImportPage() {
   const [file, setFile] = useState(null);
@@ -10,6 +10,21 @@ export default function ImportPage() {
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
+  const [userRole, setUserRole] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        setUserRole(d.user?.role || 'user');
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        setUserRole('user');
+        setAuthChecked(true);
+      });
+  }, []);
 
   const handleFile = (f) => {
     setFile(f); setPreview(null); setResult(null); setError(null);
@@ -37,6 +52,33 @@ export default function ImportPage() {
     } catch (e) { setError(e.message); }
     setImporting(false);
   };
+
+  if (!authChecked) {
+    return (
+      <div className="page-header">
+        <h1>📥 Import Data</h1>
+        <p>Checking access rights...</p>
+      </div>
+    );
+  }
+
+  if (userRole !== 'admin' && userRole !== 'sub admin' && userRole !== 'sub_admin') {
+    return (
+      <div>
+        <div className="page-header">
+          <h1>📥 Import Data</h1>
+          <p>Upload Excel files received from the Controller's Office</p>
+        </div>
+        <div className="glass-card" style={{ padding: 'var(--space-8)', textAlign: 'center', marginTop: 'var(--space-6)' }}>
+          <div style={{ fontSize: '48px', marginBottom: 'var(--space-4)' }}>🚫</div>
+          <h2 style={{ color: 'var(--accent-rose)', marginBottom: 'var(--space-4)' }}>Access Denied</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Only Administrators and Sub-Administrators can import data.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
