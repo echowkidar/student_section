@@ -93,12 +93,12 @@ export default function DataTable({
   // ── Loading skeleton ──────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="table-container">
-        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+      <div className="table-container" style={{ overflowX: 'auto' }}>
+        <table className="data-table">
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key} style={{ width: colWidths[col.key] || col.width }}>
+                <th key={col.key} style={{ minWidth: colWidths[col.key] || col.width, width: colWidths[col.key] || col.width }}>
                   {col.label}
                 </th>
               ))}
@@ -129,12 +129,12 @@ export default function DataTable({
   // ── Empty state ───────────────────────────────────────────────────────
   if (!data || data.length === 0) {
     return (
-      <div className="table-container">
-        <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+      <div className="table-container" style={{ overflowX: 'auto' }}>
+        <table className="data-table">
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.key} style={{ width: colWidths[col.key] || col.width }}>
+                <th key={col.key} style={{ minWidth: colWidths[col.key] || col.width, width: colWidths[col.key] || col.width }}>
                   {col.label}
                 </th>
               ))}
@@ -152,8 +152,8 @@ export default function DataTable({
 
   // ── Populated table ───────────────────────────────────────────────────
   return (
-    <div className="table-container">
-      <table className="data-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+    <div className="table-container" style={{ overflowX: 'auto' }}>
+      <table className="data-table" style={{ whiteSpace: 'nowrap' }}>
         <thead>
           <tr>
             {columns.map((col) => (
@@ -161,14 +161,16 @@ export default function DataTable({
                 key={col.key}
                 className={sortBy === col.key ? 'sorted' : ''}
                 style={{
-                  width: colWidths[col.key] || col.width,
+                  minWidth: colWidths[col.key] || col.width || 'auto',
+                  width: colWidths[col.key] || col.width || 'auto',
+                  maxWidth: colWidths[col.key] || 'none',
                   textAlign: col.align || 'left',
                   cursor: col.sortable ? 'pointer' : 'default',
                   position: 'relative',
                 }}
                 onClick={() => handleSort(col)}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>
                   <span>{col.label}</span>
                   {col.sortable && (
                     <span className="sort-arrow" style={{ marginLeft: '4px' }}>{getSortArrow(col.key)}</span>
@@ -183,13 +185,15 @@ export default function DataTable({
                     right: 0,
                     top: 0,
                     bottom: 0,
-                    width: '6px',
+                    width: '8px',
                     cursor: 'col-resize',
-                    zIndex: 1,
+                    zIndex: 2,
                     backgroundColor: 'transparent',
+                    borderRight: '2px solid rgba(255,255,255,0.05)'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--border-subtle)'}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  title="Drag to resize"
                 />
               </th>
             ))}
@@ -207,9 +211,9 @@ export default function DataTable({
                   key={col.key}
                   style={{ 
                     textAlign: col.align || 'left',
+                    maxWidth: colWidths[col.key] ? colWidths[col.key] : '400px', // Prevent extreme stretching initially
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
                   }}
                   title={String(row[col.key] || '')}
                 >
