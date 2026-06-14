@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 
 const pool = new Pool({
-  connectionString: 'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres',
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres',
 });
 
 export async function POST(request) {

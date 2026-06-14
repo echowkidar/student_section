@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
 const pool = new Pool({
-  connectionString: 'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres',
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres',
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sfm-secret-key-2024';
