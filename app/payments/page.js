@@ -12,6 +12,45 @@ export default function PaymentsPage() {
   const [courses, setCourses] = useState([]);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const courseDropdownRef = useRef(null);
+  
+  // Column Resizing State
+  const [colWidths, setColWidths] = useState({});
+  const resizingCol = useRef(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleMouseDown = (e, colKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = colKey;
+    startX.current = e.clientX;
+    const th = e.target.closest('th');
+    startWidth.current = th.offsetWidth;
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (!resizingCol.current) return;
+    const diff = e.clientX - startX.current;
+    const newWidth = Math.max(50, startWidth.current + diff);
+    setColWidths((prev) => ({ ...prev, [resizingCol.current]: newWidth }));
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    resizingCol.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseMove]);
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
   const [sort, setSort] = useState({ column: 'created_at', order: 'desc' });
   const [expandedRow, setExpandedRow] = useState(null);
 
@@ -197,18 +236,37 @@ export default function PaymentsPage() {
 
       {/* Data Table */}
       <div className="glass-card">
-        <div className="table-container">
-          <table className="data-table">
+        <div className="table-container" style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ whiteSpace: 'nowrap' }}>
             <thead><tr>
-              <th onClick={() => handleSort('created_at')} style={{cursor:'pointer'}}>Date <SortIcon column="created_at" /></th>
-              <th onClick={() => handleSort('student_name')} style={{cursor:'pointer'}}>Student Name <SortIcon column="student_name" /></th>
-              <th onClick={() => handleSort('roll_no')} style={{cursor:'pointer'}}>Roll No <SortIcon column="roll_no" /></th>
-              <th onClick={() => handleSort('enrolment')} style={{cursor:'pointer'}}>Enrolment <SortIcon column="enrolment" /></th>
-              <th onClick={() => handleSort('course_name')} style={{cursor:'pointer'}}>Course Name <SortIcon column="course_name" /></th>
-              <th onClick={() => handleSort('programme_code')} style={{cursor:'pointer'}}>Course Code <SortIcon column="programme_code" /></th>
-              <th onClick={() => handleSort('amount')} style={{cursor:'pointer'}}>Amount <SortIcon column="amount" /></th>
-              <th onClick={() => handleSort('method')} style={{cursor:'pointer'}}>Method <SortIcon column="method" /></th>
-              <th onClick={() => handleSort('payment_type')} style={{cursor:'pointer'}}>Type <SortIcon column="payment_type" /></th>
+              {[
+                { key: 'created_at', label: 'Date' },
+                { key: 'student_name', label: 'Student Name' },
+                { key: 'roll_no', label: 'Roll No' },
+                { key: 'enrolment', label: 'Enrolment' },
+                { key: 'course_name', label: 'Course Name' },
+                { key: 'programme_code', label: 'Course Code' },
+                { key: 'amount', label: 'Amount' },
+                { key: 'method', label: 'Method' },
+                { key: 'payment_type', label: 'Type' }
+              ].map(col => (
+                <th key={col.key} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer', position: 'relative', minWidth: colWidths[col.key] || 'auto', width: colWidths[col.key] || 'auto', maxWidth: colWidths[col.key] || 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingRight: '12px' }}>
+                    {col.label} <SortIcon column={col.key} />
+                  </div>
+                  <div
+                    onMouseDown={(e) => handleMouseDown(e, col.key)}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: 'absolute', right: 0, top: 0, bottom: 0, width: '8px', cursor: 'col-resize', zIndex: 2,
+                      backgroundColor: 'transparent', borderRight: '2px solid rgba(255,255,255,0.05)'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    title="Drag to resize"
+                  />
+                </th>
+              ))}
             </tr></thead>
             <tbody>
               {loading ? (
@@ -224,12 +282,12 @@ export default function PaymentsPage() {
               ) : data.map((p, i) => (
                 <React.Fragment key={p.id}>
                   <tr className="clickable" onClick={() => setExpandedRow(expandedRow === i ? null : i)} style={{cursor:'pointer'}}>
-                    <td style={{fontSize:'var(--text-xs)',whiteSpace:'nowrap'}}>{formatDate(p.created_at)}</td>
-                    <td style={{fontWeight:500}}>{p.student_name || '—'}</td>
-                    <td><code style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'2px 6px',borderRadius:'4px'}}>{p.roll_no || '—'}</code></td>
-                    <td><code style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'2px 6px',borderRadius:'4px'}}>{p.enrolment || '—'}</code></td>
-                    <td style={{maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize:'var(--text-xs)'}} title={p.course_name}>{p.course_name || '—'}</td>
-                    <td><span className="badge info">{p.programme_code || '—'}</span></td>
+                    <td style={{fontSize:'var(--text-xs)',whiteSpace:'nowrap',maxWidth:colWidths['created_at']||'200px',overflow:'hidden',textOverflow:'ellipsis'}}>{formatDate(p.created_at)}</td>
+                    <td style={{fontWeight:500,maxWidth:colWidths['student_name']||'200px',overflow:'hidden',textOverflow:'ellipsis'}} title={p.student_name}>{p.student_name || '—'}</td>
+                    <td style={{maxWidth:colWidths['roll_no']||'150px'}}><code style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'2px 6px',borderRadius:'4px'}}>{p.roll_no || '—'}</code></td>
+                    <td style={{maxWidth:colWidths['enrolment']||'150px'}}><code style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'2px 6px',borderRadius:'4px'}}>{p.enrolment || '—'}</code></td>
+                    <td style={{maxWidth:colWidths['course_name']||'150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize:'var(--text-xs)'}} title={p.course_name}>{p.course_name || '—'}</td>
+                    <td style={{maxWidth:colWidths['programme_code']||'150px'}}><span className="badge info">{p.programme_code || '—'}</span></td>
                     <td style={{fontWeight:600,color:'var(--accent-emerald-soft)'}}>{formatCurrency(p.amount)}</td>
                     <td>{getMethodIcon(p.method)} {p.method}</td>
                     <td><span className="badge" style={{background: p.payment_type?.includes('Admission') ? 'var(--accent-blue-dim)' : p.payment_type?.includes('Continuation') ? 'var(--accent-emerald-dim)' : 'var(--accent-amber-dim)', color: p.payment_type?.includes('Admission') ? 'var(--accent-blue-soft)' : p.payment_type?.includes('Continuation') ? 'var(--accent-emerald-soft)' : 'var(--accent-amber-soft)', fontSize:'var(--text-xs)',padding:'2px 8px',borderRadius:'var(--radius-full)'}}>{p.payment_type}</span></td>
