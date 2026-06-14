@@ -9,7 +9,7 @@ export async function GET() {
   const client = await pool.connect();
 
   try {
-    const hallsRes = await client.query('SELECT "Abdullah Hall" as name, "Girls" as gender, "ABD" as code FROM hall_name_code');
+    const hallsRes = await client.query('SELECT * FROM hall_name_code');
     const halls = hallsRes.rows;
 
     const collectionsRes = await client.query(`
@@ -20,24 +20,30 @@ export async function GET() {
       FROM payment
       WHERE status = 'captured' OR status = 'Success'
       GROUP BY CASE WHEN notes IS NOT NULL AND notes LIKE '{%' THEN notes::json->>'hall_code' ELSE NULL END
+      ORDER BY total_collected DESC
     `);
 
-    // Merge data
-    const results = collectionsRes.rows.map(row => {
-      const code = row.hall_code;
-      const hallDetails = halls.find(h => h.code === code) || { name: code ? `Unknown (${code})` : 'No Hall Assigned', gender: 'N/A' };
-      return {
-        code,
-        name: hallDetails.name,
-        gender: hallDetails.gender,
-        studentCount: parseInt(row.student_count, 10),
-        totalCollected: parseFloat(row.total_collected) || 0
-      };
-    });
+    const genderSummaryRes = await client.query(`
+      WITH HallCollections AS (
+        SELECT 
+          CASE WHEN notes IS NOT NULL AND notes LIKE '{%' THEN notes::json->>'hall_code' ELSE NULL END as hall_code,
+          SUM(CAST(amount AS NUMERIC)) as total_collected
+        FROM payment
+        WHERE status = 'captured' OR status = 'Success'
+        GROUP BY 1
+      )
+      SELECT 
+        COALESCE(h."Girls", 'Unknown') as gender,
+        SUM(hc.total_collected) as total_collected
+      FROM HallCollections hc
+      LEFT JOIN hall_name_code h ON h."ABD" = hc.hall_code
+      GROUP BY 1
+    `);
 
     return NextResponse.json({
-      success: true,
-      data: results.sort((a, b) => b.totalCollected - a.totalCollected)
+      hallMaster: halls,
+      hallCollection: collectionsRes.rows,
+      genderSummary: genderSummaryRes.rows
     });
   } catch (error) {
     console.error('Hall-wise API Error:', error);
