@@ -6,9 +6,9 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres',
 });
 
-// Helper to get SMTP settings
-async function getSmtpSettings() {
-  const result = await pool.query("SELECT key, value FROM app_settings WHERE key IN ('smtp_enabled', 'smtp_email', 'smtp_password')");
+// Helper to get settings
+async function getSettings() {
+  const result = await pool.query("SELECT key, value FROM app_settings WHERE key IN ('smtp_enabled', 'smtp_email', 'smtp_password', 'registration_enabled')");
   const settings = {};
   for (const row of result.rows) {
     settings[row.key] = row.value;
@@ -30,8 +30,13 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Email already exists' }, { status: 409 });
     }
 
-    const settings = await getSmtpSettings();
+    const settings = await getSettings();
     
+    // Check if registration is enabled
+    if (settings.registration_enabled === 'false') {
+      return NextResponse.json({ error: 'User registration is currently disabled by administrator' }, { status: 403 });
+    }
+
     // OPTION A: If SMTP is off, bypass OTP and register directly
     if (settings.smtp_enabled !== 'true') {
       await pool.query(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -20,6 +20,21 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [checkingSettings, setCheckingSettings] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.settings && d.settings.registration_enabled === 'false') {
+          setRegistrationEnabled(false);
+        }
+        setCheckingSettings(false);
+      })
+      .catch(() => setCheckingSettings(false));
+  }, []);
 
   const handleSendOtp = async (e) => {
     e.preventDefault();
@@ -92,6 +107,31 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  if (checkingSettings) {
+    return <div style={{textAlign:'center', color:'var(--text-secondary)'}}>Loading...</div>;
+  }
+
+  if (!registrationEnabled) {
+    return (
+      <div style={{ width: '100%', maxWidth: '440px', textAlign: 'center' }}>
+        <div style={{ marginBottom: 'var(--space-8)' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px', borderRadius: '16px', background: 'var(--accent-blue-dim)', color: 'var(--accent-blue)', fontSize: '32px', marginBottom: 'var(--space-4)' }}>
+            🔒
+          </div>
+          <h1 style={{ fontSize: 'var(--text-3xl)', marginBottom: 'var(--space-2)' }}>Registration Disabled</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', lineHeight: '1.6' }}>
+            New user registration is currently disabled by the administrator. Please contact the IT department or system administrator to request an account.
+          </p>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 'var(--space-6)' }}>
+          <Link href="/login" style={{ color: 'var(--accent-blue)', fontSize: 'var(--text-sm)', textDecoration: 'none', fontWeight: '500' }}>
+            ← Back to Login
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: '440px' }}>

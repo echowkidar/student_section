@@ -1,16 +1,59 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function SettingsPage() {
   const [dateFormat, setDateFormat] = useState('dd/mm/yyyy');
   const [numberFormat, setNumberFormat] = useState('indian');
   const [academicYear, setAcademicYear] = useState('2025-26');
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.settings) {
+          // Default is true if not set
+          setRegistrationEnabled(data.settings.registration_enabled !== 'false');
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const handleToggleRegistration = async (newValue) => {
+    setRegistrationEnabled(newValue);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'registration_enabled', value: newValue ? 'true' : 'false' }),
+      });
+    } catch (error) {
+      console.error('Failed to save setting');
+    }
+  };
 
   return (
     <div>
       <div className="page-header"><h1>⚙️ Settings</h1><p>Configure system preferences</p></div>
 
       <div style={{display:'grid',gap:'var(--space-5)',maxWidth:'800px'}}>
+        {/* Security & Access */}
+        <div className="glass-card" style={{padding:'var(--space-6)'}}>
+          <h4 style={{marginBottom:'var(--space-4)'}}>🔒 Security & Access</h4>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:500}}>User Registration</div>
+              <div style={{fontSize:'var(--text-xs)',color:'var(--text-tertiary)'}}>Allow new users to register on the platform</div>
+            </div>
+            <div style={{display:'flex',gap:'2px',background:'var(--bg-input)',borderRadius:'var(--radius-md)',padding:'2px'}}>
+              <button disabled={loading} onClick={() => handleToggleRegistration(true)} style={{padding:'var(--space-1) var(--space-3)',borderRadius:'6px',border:'none',cursor:'pointer',fontSize:'var(--text-xs)',fontWeight:600,background:registrationEnabled?'var(--accent-blue)':'transparent',color:registrationEnabled?'white':'var(--text-secondary)'}}>ON</button>
+              <button disabled={loading} onClick={() => handleToggleRegistration(false)} style={{padding:'var(--space-1) var(--space-3)',borderRadius:'6px',border:'none',cursor:'pointer',fontSize:'var(--text-xs)',fontWeight:600,background:!registrationEnabled?'var(--accent-rose)':'transparent',color:!registrationEnabled?'white':'var(--text-secondary)'}}>OFF</button>
+            </div>
+          </div>
+        </div>
+
         {/* Academic Year */}
         <div className="glass-card" style={{padding:'var(--space-6)'}}>
           <h4 style={{marginBottom:'var(--space-4)'}}>📅 Academic Year</h4>
@@ -58,7 +101,7 @@ export default function SettingsPage() {
             <div><strong>Application:</strong> Student Fee Management System</div>
             <div><strong>Purpose:</strong> Track and analyse student fee payments for AMU</div>
             <div><strong>Version:</strong> 1.0.0</div>            
-	    <div><strong>Developer:</strong> Zafar Ali Khan - Dedicated to AMU</div>
+            <div><strong>Developer:</strong> Zafar Ali Khan - Dedicated to AMU</div>
           </div>
         </div>
       </div>
