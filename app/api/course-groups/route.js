@@ -34,10 +34,7 @@ async function checkAccess() {
 
 // GET all groups and their mapped courses
 export async function GET() {
-  if (!(await checkAccess())) {
-    return NextResponse.json({ error: 'Access Denied' }, { status: 403 });
-  }
-
+  // We allow GET for all users so they can use it in reports dropdown
   const client = await pool.connect();
   try {
     const groupsRes = await client.query('SELECT * FROM course_groups ORDER BY group_name');

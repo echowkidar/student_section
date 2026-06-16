@@ -24,7 +24,6 @@ export default function PrintHeadWiseReport() {
           url += `&course=unknown`;
         }
       } else if (groupBy === 'faculty') {
-        // Find all courses in this faculty
         const facCourses = data?.courses?.filter(c => c.FACULTY === course || c.FACNAME === course).map(c => c.CLASSCODE) || [];
         if (facCourses.length > 0) {
           url += `&groupCourses=${facCourses.join(',')}`;
@@ -42,24 +41,47 @@ export default function PrintHeadWiseReport() {
         setLoading(false); 
       })
       .catch(() => setLoading(false));
-  }, [type, course, groupBy]); // Note: data dependency omitted to prevent infinite loop
+  }, [type, course, groupBy]);
 
   const courses = data?.courses || [];
   const courseGroups = data?.courseGroups || [];
   const feeBreakdown = data?.feeBreakdown || [];
   const heads = data?.heads || [];
 
-  const grouped = {};
-  heads.forEach(h => { if (!grouped[h.CATEGORY]) grouped[h.CATEGORY] = []; grouped[h.CATEGORY].push(h); });
+  const groupedHeads = {};
+  heads.forEach(h => { if (!groupedHeads[h.CATEGORY]) groupedHeads[h.CATEGORY] = []; groupedHeads[h.CATEGORY].push(h); });
 
-  const nrRows = feeBreakdown.filter(r => r.R_NR === 'N');
-  const rRows = feeBreakdown.filter(r => r.R_NR === 'R');
-  
+  // Merge fee breakdown
+  const mergedNrRow = { TOT_AMT: 0 };
+  const mergedRRow = { TOT_AMT: 0 };
+  let hasNr = false;
+  let hasR = false;
+
+  feeBreakdown.forEach(r => {
+    const isNr = r.R_NR === 'N';
+    const targetRow = isNr ? mergedNrRow : mergedRRow;
+    if (isNr) hasNr = true;
+    else hasR = true;
+
+    heads.forEach(h => {
+      if (r[h.HEAD_CODE]) {
+        targetRow[h.HEAD_CODE] = (targetRow[h.HEAD_CODE] || 0) + parseFloat(r[h.HEAD_CODE]);
+      }
+    });
+    if (r.TOT_AMT) {
+      targetRow.TOT_AMT += parseFloat(r.TOT_AMT);
+    }
+  });
+
   let selectedEntityName = '';
   let selectedEntityCode = '';
   let selectedEntityFaculty = '';
 
-  if (groupBy === 'course-group') {
+  if (!course) {
+    selectedEntityName = 'All Courses Merged';
+    selectedEntityCode = 'ALL';
+    selectedEntityFaculty = 'All Faculties';
+  } else if (groupBy === 'course-group') {
     const group = courseGroups.find(g => g.id.toString() === course);
     selectedEntityName = group?.group_name || 'Course Group';
     selectedEntityCode = 'Group';
@@ -76,7 +98,7 @@ export default function PrintHeadWiseReport() {
   }
 
   const exportToExcel = () => {
-    if (!course || feeBreakdown.length === 0) return;
+    if (feeBreakdown.length === 0) return;
 
     const excelData = [];
     excelData.push([`Fee Structure: ${selectedEntityName} (${selectedEntityCode})`]);
@@ -85,19 +107,25 @@ export default function PrintHeadWiseReport() {
     excelData.push([]);
 
     const headers = ['Head Code', 'Head of Account'];
-    if (nrRows.length > 0) headers.push('Non-Resident (₹)');
-    if (rRows.length > 0) headers.push('Resident (₹)');
+    if (hasNr) headers.push('Non-Resident (₹)');
+    if (hasR) headers.push('Resident (₹)');
+    if (hasNr || hasR) headers.push('Total (₹)');
     excelData.push(headers);
 
-    Object.entries(grouped).forEach(([cat, catHeads]) => {
+    Object.entries(groupedHeads).forEach(([cat, catHeads]) => {
       excelData.push([`--- Category ${cat} ---`, '', '', '']);
       catHeads.forEach(h => {
-        const nrVal = nrRows[0]?.[h.HEAD_CODE];
-        const rVal = rRows[0]?.[h.HEAD_CODE];
+        const nrVal = mergedNrRow[h.HEAD_CODE];
+        const rVal = mergedRRow[h.HEAD_CODE];
         if (nrVal !== undefined || rVal !== undefined) {
           const row = [h.HEAD_CODE, h.HEAD_NAME || h.SHORT_HEAD_NAME];
-          if (nrRows.length > 0) row.push(nrVal && parseFloat(nrVal) > 0 ? parseFloat(nrVal) : 0);
-          if (rRows.length > 0) row.push(rVal && parseFloat(rVal) > 0 ? parseFloat(rVal) : 0);
+          const nrNum = nrVal && parseFloat(nrVal) > 0 ? parseFloat(nrVal) : 0;
+          const rNum = rVal && parseFloat(rVal) > 0 ? parseFloat(rVal) : 0;
+          
+          if (hasNr) row.push(nrNum);
+          if (hasR) row.push(rNum);
+          if (hasNr || hasR) row.push(nrNum + rNum);
+          
           excelData.push(row);
         }
       });
@@ -105,37 +133,28 @@ export default function PrintHeadWiseReport() {
 
     excelData.push([]);
     const totalRow = ['TOTAL', ''];
-    if (nrRows.length > 0) totalRow.push(parseFloat(nrRows[0]?.TOT_AMT || 0));
-    if (rRows.length > 0) totalRow.push(parseFloat(rRows[0]?.TOT_AMT || 0));
+    if (hasNr) totalRow.push(mergedNrRow.TOT_AMT);
+    if (hasR) totalRow.push(mergedRRow.TOT_AMT);
+    if (hasNr || hasR) totalRow.push((mergedNrRow.TOT_AMT || 0) + (mergedRRow.TOT_AMT || 0));
     excelData.push(totalRow);
 
     const ws = XLSX.utils.aoa_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Fee Structure");
-    XLSX.writeFile(wb, `${selectedEntityCode}_${type}_Fee_Structure.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Merged Fee Structure");
+    XLSX.writeFile(wb, `${selectedEntityCode}_${type}_Merged_Fee.xlsx`);
   };
 
   const printReport = () => {
     window.print();
   };
 
-  // Get unique faculties
   const faculties = [...new Set(courses.map(c => c.FACNAME || c.FACULTY).filter(Boolean))];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
-      {/* Non-printable header and controls */}
-      <div className="print-visible" style={{display:'none', textAlign:'center', marginBottom:'2rem'}}>
-        <h2>Aligarh Muslim University</h2>
-        <h3>Student Section Fee Management</h3>
-        <h4>{type === 'admission' ? 'Admission' : 'Continuation'} Fee Structure</h4>
-        <p><strong></strong> {selectedEntityName} {selectedEntityCode !== 'Faculty' && selectedEntityCode !== 'Group' ? `(${selectedEntityCode})` : ''}</p>
-        <p><strong>Faculty:</strong> {selectedEntityFaculty}</p>
-      </div>
-
       <div className="page-header" style={{ flexShrink: 0, '@media print': {display: 'none'} }}>
         <h1>Head-wise Breakdown</h1>
-        <p>Generate a printable chart or Excel export for a specific course, faculty, or group fee structure</p>
+        <p>Generate a printable chart or Excel export for a specific course, faculty, group, or all courses merged</p>
       </div>
 
       <div className="glass-card" style={{padding:'var(--space-4)',marginBottom:'var(--space-5)', flexShrink: 0, '@media print': {display: 'none'} }}>
@@ -164,7 +183,7 @@ export default function PrintHeadWiseReport() {
             ))}
           </select>
 
-          {course && feeBreakdown.length > 0 && (
+          {feeBreakdown.length > 0 && (
             <div style={{display:'flex',gap:'var(--space-2)',marginLeft:'auto'}}>
               <button className="btn btn-export print-visible" onClick={exportToExcel}>
                 <span style={{marginRight:'8px'}}>📊</span> Export Excel
@@ -178,60 +197,89 @@ export default function PrintHeadWiseReport() {
       </div>
 
       {/* Report Preview */}
-      {course && feeBreakdown.length > 0 && (
+      {feeBreakdown.length > 0 && (
         <div className="glass-card" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding:'var(--space-5)', overflow: 'hidden' }}>
-          <div className="table-container" style={{border:'none', flex: 1, overflow: 'auto'}}>
-            <table className="data-table" style={{fontSize:'var(--text-xs)'}}>
-              <thead>
-                <tr style={{background:'var(--bg-base)'}}>
-                  <th style={{minWidth:'200px'}}>Head of Account</th>
-                  <th>Code</th>
-                  {nrRows.length > 0 && <th style={{textAlign:'center',background:'var(--accent-blue-dim)',color:'var(--accent-blue-soft)'}}>NON-RESIDENT</th>}
-                  {rRows.length > 0 && <th style={{textAlign:'center',background:'var(--accent-emerald-dim)',color:'var(--accent-emerald-soft)'}}>RESIDENT</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(grouped).map(([cat, catHeads]) => (
-                  <React.Fragment key={cat}>
-                    <tr style={{background:CAT_COLORS[cat]?.bg}}>
-                      <td colSpan={2 + (nrRows.length > 0 ? 1 : 0) + (rRows.length > 0 ? 1 : 0)} style={{fontWeight:700,color:CAT_COLORS[cat]?.text,padding:'var(--space-3) var(--space-4)'}}>
-                        Category {cat} — {CAT_COLORS[cat]?.label}
-                      </td>
-                    </tr>
-                    {catHeads.map(h => {
-                      const nrVal = nrRows[0]?.[h.HEAD_CODE];
-                      const rVal = rRows[0]?.[h.HEAD_CODE];
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div className="print-visible" style={{display:'none', textAlign:'center', marginBottom:'1rem'}}>
+              <h2>Aligarh Muslim University</h2>
+              <h3>Student Section Fee Management</h3>
+              <h4>{type === 'admission' ? 'Admission' : 'Continuation'} Fee Structure</h4>
+              <p><strong>{selectedEntityName}</strong></p>
+              <p><strong>Faculty:</strong> {selectedEntityFaculty}</p>
+            </div>
+            
+            <h3 style={{marginBottom:'1rem', flexShrink: 0, color:'var(--text-secondary)'}} className="hide-on-print">
+              {selectedEntityName}
+            </h3>
+
+            <div className="table-container" style={{border:'none', flex: 1, overflow: 'auto'}}>
+              <table className="data-table" style={{fontSize:'var(--text-xs)'}}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 50 }}>
+                  <tr style={{background:'var(--bg-base)'}}>
+                    <th style={{minWidth:'200px', position: 'sticky', top: 0, zIndex: 50}}>Head of Account</th>
+                    <th style={{position: 'sticky', top: 0, zIndex: 50}}>Code</th>
+                    {hasNr && <th style={{textAlign:'center',background:'var(--accent-blue-dim)',color:'var(--accent-blue-soft)', position: 'sticky', top: 0, zIndex: 50}}>NON-RESIDENT</th>}
+                    {hasR && <th style={{textAlign:'center',background:'var(--accent-emerald-dim)',color:'var(--accent-emerald-soft)', position: 'sticky', top: 0, zIndex: 50}}>RESIDENT</th>}
+                    {(hasNr || hasR) && <th style={{textAlign:'center',background:'var(--accent-purple-dim)',color:'var(--accent-purple-soft)', position: 'sticky', top: 0, zIndex: 50}}>TOTAL (NR + R)</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(groupedHeads).map(([cat, catHeads]) => {
+                    let hasHeads = false;
+                    const rows = catHeads.map(h => {
+                      const nrVal = mergedNrRow[h.HEAD_CODE];
+                      const rVal = mergedRRow[h.HEAD_CODE];
                       if (nrVal === undefined && rVal === undefined) return null;
+                      hasHeads = true;
+                      
+                      const nrNum = nrVal && parseFloat(nrVal) > 0 ? parseFloat(nrVal) : 0;
+                      const rNum = rVal && parseFloat(rVal) > 0 ? parseFloat(rVal) : 0;
+                      const totalNum = nrNum + rNum;
+                      
                       return (
                         <tr key={h.HEAD_CODE}>
                           <td style={{fontWeight:500}}>{h.SHORT_HEAD_NAME || h.HEAD_NAME}</td>
                           <td><code style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'1px 6px',borderRadius:'3px'}}>{h.HEAD_CODE}</code></td>
-                          {nrRows.length > 0 && <td style={{textAlign:'right',fontWeight:500}}>{nrVal && parseFloat(nrVal) > 0 ? formatCurrency(nrVal) : nrVal === '0.00' ? '—' : '—'}</td>}
-                          {rRows.length > 0 && <td style={{textAlign:'right',fontWeight:500}}>{rVal && parseFloat(rVal) > 0 ? formatCurrency(rVal) : rVal === '0.00' ? '—' : '—'}</td>}
+                          {hasNr && <td style={{textAlign:'right',fontWeight:500}}>{nrNum > 0 ? formatCurrency(nrNum) : '—'}</td>}
+                          {hasR && <td style={{textAlign:'right',fontWeight:500}}>{rNum > 0 ? formatCurrency(rNum) : '—'}</td>}
+                          {(hasNr || hasR) && <td style={{textAlign:'right',fontWeight:700,color:'var(--accent-purple-soft)'}}>{totalNum > 0 ? formatCurrency(totalNum) : '—'}</td>}
                         </tr>
                       );
-                    })}
-                  </React.Fragment>
-                ))}
-                <tr style={{background:'var(--bg-elevated)',fontWeight:700,fontSize:'var(--text-sm)'}}>
-                  <td colSpan={2} style={{fontWeight:800}}>TOTAL</td>
-                  {nrRows.length > 0 && <td style={{textAlign:'right',color:'var(--accent-blue-soft)'}}>{formatCurrency(nrRows[0]?.TOT_AMT)}</td>}
-                  {rRows.length > 0 && <td style={{textAlign:'right',color:'var(--accent-emerald-soft)'}}>{formatCurrency(rRows[0]?.TOT_AMT)}</td>}
-                </tr>
-              </tbody>
-            </table>
+                    });
+
+                    if (!hasHeads) return null;
+
+                    return (
+                      <React.Fragment key={cat}>
+                        <tr style={{background:CAT_COLORS[cat]?.bg}}>
+                          <td colSpan={2 + (hasNr ? 1 : 0) + (hasR ? 1 : 0) + ((hasNr || hasR) ? 1 : 0)} style={{fontWeight:700,color:CAT_COLORS[cat]?.text,padding:'var(--space-3) var(--space-4)'}}>
+                            Category {cat} — {CAT_COLORS[cat]?.label}
+                          </td>
+                        </tr>
+                        {rows}
+                      </React.Fragment>
+                    );
+                  })}
+                  <tr style={{background:'var(--bg-elevated)',fontWeight:700,fontSize:'var(--text-sm)'}}>
+                    <td colSpan={2} style={{fontWeight:800}}>GRAND TOTAL</td>
+                    {hasNr && <td style={{textAlign:'right',color:'var(--accent-blue-soft)'}}>{formatCurrency(mergedNrRow.TOT_AMT)}</td>}
+                    {hasR && <td style={{textAlign:'right',color:'var(--accent-emerald-soft)'}}>{formatCurrency(mergedRRow.TOT_AMT)}</td>}
+                    {(hasNr || hasR) && <td style={{textAlign:'right',color:'var(--accent-purple-soft)'}}>{formatCurrency((mergedNrRow.TOT_AMT || 0) + (mergedRRow.TOT_AMT || 0))}</td>}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {course && feeBreakdown.length === 0 && !loading && (
+      {feeBreakdown.length === 0 && !loading && (
         <div className="glass-card" style={{padding:'var(--space-8)',textAlign:'center'}}>
           <div style={{fontSize:'3rem',marginBottom:'var(--space-3)'}}>📭</div>
-          <p style={{color:'var(--text-secondary)'}}>No fee structure found for this course</p>
+          <p style={{color:'var(--text-secondary)'}}>No fee structure found for the selected criteria</p>
         </div>
       )}
       
-      {/* Global styles injection specifically to support print view tweaks inside this component if needed */}
       <style jsx global>{`
         @media print {
           html, body {
@@ -241,10 +289,12 @@ export default function PrintHeadWiseReport() {
           .print-visible[style*="display: none"] {
             display: block !important;
           }
+          .hide-on-print {
+            display: none !important;
+          }
           .glass-card > div.filter-bar {
             display: none !important;
           }
-          /* Allow table to break across pages */
           div[style*="height: calc"] {
             height: auto !important;
             display: block !important;

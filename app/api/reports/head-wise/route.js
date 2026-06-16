@@ -42,7 +42,7 @@ export async function GET(request) {
     });
 
     let feeBreakdown = [];
-    if (courseCode) {
+    if (courseCode && courseCode !== 'unknown') {
       const feeRes = await client.query(`
         SELECT *
         FROM ${tableName}
@@ -62,6 +62,14 @@ export async function GET(request) {
         `, codes);
         feeBreakdown = feeRes.rows;
       }
+    } else {
+      // Fetch all if no filter
+      const feeRes = await client.query(`
+        SELECT *
+        FROM ${tableName}
+        ORDER BY "CLASSCODE", "R_NR", "IE", "SEX"
+      `);
+      feeBreakdown = feeRes.rows;
     }
 
     // Get category-wise summary across all courses

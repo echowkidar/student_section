@@ -15,7 +15,13 @@ export default function HeadWiseReports() {
   useEffect(() => {
     fetch('/api/course-groups')
       .then(r => r.json())
-      .then(d => setCourseGroups(d))
+      .then(d => {
+        if (Array.isArray(d)) {
+          setCourseGroups(d);
+        } else {
+          setCourseGroups([]);
+        }
+      })
       .catch(console.error);
   }, []);
 

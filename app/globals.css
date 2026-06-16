@@ -583,7 +583,8 @@ h6 { font-size: var(--text-md);  }
   font-size: var(--text-sm);
 }
 
-.data-table thead {
+.data-table thead,
+.data-table th {
   position: sticky;
   top: 0;
   z-index: 10; /* Increased z-index to stay above body rows */
