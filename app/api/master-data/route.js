@@ -96,11 +96,19 @@ export async function POST(request) {
     const { table, data } = body;
 
     if (table === 'halls') {
-      const res = await client.query(
-        `INSERT INTO hall_name_code ("Abdullah Hall", "Girls", "ABD") VALUES ($1, $2, $3) RETURNING *`,
-        [data.name, data.gender, data.code]
-      );
-      return NextResponse.json({ success: true, data: res.rows[0] });
+      const codes = data.code.split(',').map(c => c.trim()).filter(Boolean);
+      
+      await client.query('BEGIN');
+      const newRows = [];
+      for (const code of codes) {
+        const res = await client.query(
+          `INSERT INTO hall_name_code ("Abdullah Hall", "Girls", "ABD") VALUES ($1, $2, $3) RETURNING *`,
+          [data.name, data.gender, code]
+        );
+        newRows.push(res.rows[0]);
+      }
+      await client.query('COMMIT');
+      return NextResponse.json({ success: true, data: newRows[0] });
     }
 
     if (table === 'heads') {
@@ -153,11 +161,26 @@ export async function PUT(request) {
     const { table, data, id } = body;
 
     if (table === 'halls') {
-      const res = await client.query(
-        `UPDATE hall_name_code SET "Abdullah Hall" = $1, "Girls" = $2, "ABD" = $3 WHERE id = $4 RETURNING *`,
-        [data.name, data.gender, data.code, id]
-      );
-      return NextResponse.json({ success: true, data: res.rows[0] });
+      const ids = id.toString().split(',');
+      const codes = data.code.split(',').map(c => c.trim()).filter(Boolean);
+      
+      await client.query('BEGIN');
+      
+      // If the number of codes matches the number of ids, we can update them directly
+      // However, if the user added/removed codes, it's safer to delete all old and insert new ones
+      await client.query(`DELETE FROM hall_name_code WHERE id = ANY($1::int[])`, [ids]);
+      
+      const newRows = [];
+      for (const code of codes) {
+        const res = await client.query(
+          `INSERT INTO hall_name_code ("Abdullah Hall", "Girls", "ABD") VALUES ($1, $2, $3) RETURNING *`,
+          [data.name, data.gender, code]
+        );
+        newRows.push(res.rows[0]);
+      }
+      
+      await client.query('COMMIT');
+      return NextResponse.json({ success: true, data: newRows[0] });
     }
 
     if (table === 'heads') {
@@ -172,10 +195,11 @@ export async function PUT(request) {
 
     return NextResponse.json({ error: 'Invalid table parameter' }, { status: 400 });
   } catch (error) {
+    if (client) await client.query('ROLLBACK');
     console.error('Master Data PUT Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
 
@@ -191,7 +215,8 @@ export async function DELETE(request) {
   const client = await pool.connect();
   try {
     if (table === 'halls') {
-      await client.query(`DELETE FROM hall_name_code WHERE id = $1`, [id]);
+      const ids = id.toString().split(',');
+      await client.query(`DELETE FROM hall_name_code WHERE id = ANY($1::int[])`, [ids]);
       return NextResponse.json({ success: true });
     }
 
@@ -211,6 +236,6 @@ export async function DELETE(request) {
     console.error('Master Data DELETE Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }

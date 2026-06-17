@@ -227,7 +227,13 @@ export default function MasterDataPage() {
 
   const openEditModal = (record) => {
     setModalType('edit');
-    if (tab === 'halls') setFormData({ id: record.id, name: record['Abdullah Hall'], gender: record.Girls, code: record.ABD });
+    if (tab === 'halls') {
+      if (record.isGrouped) {
+        setFormData({ id: record.ids.join(','), name: record.name, gender: record.gender, code: record.codes.join(', ') });
+      } else {
+        setFormData({ id: record.id, name: record['Abdullah Hall'], gender: record.Girls, code: record.ABD });
+      }
+    }
     if (tab === 'heads') setFormData({ ...record });
     setIsModalOpen(true);
   };
@@ -262,7 +268,7 @@ export default function MasterDataPage() {
   };
 
   const handleDeleteRecord = async (record) => {
-    const id = tab === 'halls' ? record.id : tab === 'heads' ? record.HEAD_CODE : record.CLASSCODE;
+    const id = tab === 'halls' ? (record.isGrouped ? record.ids.join(',') : record.id) : tab === 'heads' ? record.HEAD_CODE : record.CLASSCODE;
     if (!confirm('Are you sure you want to delete this record?')) return;
     
     try {
@@ -422,21 +428,36 @@ export default function MasterDataPage() {
         <div className="table-container" style={{border:'none'}}>
           {tab === 'halls' && (
             <table className="data-table">
-              <thead><tr><th>Hall Name</th><th>Gender</th><th>Hall Code</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+              <thead><tr><th>Hall Name</th><th>Gender</th><th>Hall Code(s)</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
               <tbody>
-                {filtered.map((r, i) => (
-                  <tr key={i}>
-                    <td style={{fontWeight:500}}>{r['Abdullah Hall']}</td>
-                    <td><span style={{padding:'2px 10px',borderRadius:'var(--radius-full)',fontSize:'var(--text-xs)',fontWeight:600,background:r.Girls==='Boys'?'var(--accent-blue-dim)':r.Girls==='Girls'?'var(--accent-rose-dim)':'var(--bg-hover)',color:r.Girls==='Boys'?'var(--accent-blue-soft)':r.Girls==='Girls'?'var(--accent-rose-soft)':'var(--text-secondary)'}}>{r.Girls}</span></td>
-                    <td><code style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'2px 8px',borderRadius:'4px'}}>{r.ABD}</code></td>
-                    <td style={{textAlign:'right'}}>
-                      <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
-                        <button onClick={() => openEditModal(r)} style={{padding:'4px 8px', fontSize:'var(--text-xs)', borderRadius:'var(--radius-sm)', background:'var(--bg-elevated)', border:'1px solid var(--border-subtle)', cursor:'pointer', color:'var(--text-secondary)'}}>✏️ Edit</button>
-                        <button onClick={() => handleDeleteRecord(r)} style={{padding:'4px 8px', fontSize:'var(--text-xs)', borderRadius:'var(--radius-sm)', background:'var(--accent-rose-dim)', border:'1px solid transparent', cursor:'pointer', color:'var(--accent-rose-soft)'}}>🗑️ Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  const grouped = {};
+                  filtered.forEach(r => {
+                    const name = r['Abdullah Hall'];
+                    if (!grouped[name]) grouped[name] = { name, gender: r.Girls, codes: [], ids: [] };
+                    if (!grouped[name].codes.includes(r.ABD)) {
+                      grouped[name].codes.push(r.ABD);
+                      grouped[name].ids.push(r.id);
+                    }
+                  });
+                  return Object.values(grouped).map((g, i) => (
+                    <tr key={i}>
+                      <td style={{fontWeight:500}}>{g.name}</td>
+                      <td><span style={{padding:'2px 10px',borderRadius:'var(--radius-full)',fontSize:'var(--text-xs)',fontWeight:600,background:g.gender==='Boys'?'var(--accent-blue-dim)':g.gender==='Girls'?'var(--accent-rose-dim)':'var(--bg-hover)',color:g.gender==='Boys'?'var(--accent-blue-soft)':g.gender==='Girls'?'var(--accent-rose-soft)':'var(--text-secondary)'}}>{g.gender}</span></td>
+                      <td>
+                        {g.codes.map((code, idx) => (
+                          <code key={idx} style={{fontSize:'var(--text-xs)',background:'var(--bg-hover)',padding:'2px 8px',borderRadius:'4px', marginRight:'4px'}}>{code}</code>
+                        ))}
+                      </td>
+                      <td style={{textAlign:'right'}}>
+                        <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
+                          <button onClick={() => openEditModal({...g, isGrouped: true})} style={{padding:'4px 8px', fontSize:'var(--text-xs)', borderRadius:'var(--radius-sm)', background:'var(--bg-elevated)', border:'1px solid var(--border-subtle)', cursor:'pointer', color:'var(--text-secondary)'}}>✏️ Edit</button>
+                          <button onClick={() => handleDeleteRecord({...g, isGrouped: true})} style={{padding:'4px 8px', fontSize:'var(--text-xs)', borderRadius:'var(--radius-sm)', background:'var(--accent-rose-dim)', border:'1px solid transparent', cursor:'pointer', color:'var(--accent-rose-soft)'}}>🗑️ Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           )}
@@ -589,8 +610,8 @@ export default function MasterDataPage() {
                     </select>
                   </div>
                   <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
-                    <label style={{fontSize:'var(--text-sm)', fontWeight:600}}>Hall Code</label>
-                    <input className="form-input" required value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="e.g. ABD" />
+                    <label style={{fontSize:'var(--text-sm)', fontWeight:600}}>Hall Code(s) (comma-separated)</label>
+                    <input className="form-input" required value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="e.g. ABD, AB" />
                   </div>
                 </>
               )}

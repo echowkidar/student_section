@@ -1,18 +1,9 @@
-import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
+const {Pool}=require('pg'); 
+const pool=new Pool({connectionString:'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres'}); 
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:strongpassword@217.217.249.153:5432/postgres',
-});
-
-export async function GET() {
-  const client = await pool.connect();
-
+async function run() {
   try {
-    const hallsRes = await client.query('SELECT * FROM hall_name_code');
-    const halls = hallsRes.rows;
-
-    const categoryCHeadsRes = await client.query(`
+    const categoryCHeadsRes = await pool.query(`
       SELECT "HEAD_CODE", "SHORT_HEAD_NAME" 
       FROM head_of_account_name_code 
       WHERE "CATEGORY" = 'C' 
@@ -21,7 +12,7 @@ export async function GET() {
     const categoryCHeads = categoryCHeadsRes.rows;
     const catCHeadCodes = categoryCHeads.map(h => h.HEAD_CODE);
 
-    const columnsRes = await client.query(`
+    const columnsRes = await pool.query(`
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name IN ('admission_course_code_fee', 'continuation_course_code_fee')
@@ -42,9 +33,7 @@ export async function GET() {
       selectCatC_Final = '0 as dummy';
     }
 
-    const totalCatCSql = validCatCHeads.map(code => `COALESCE(mb."${code}", 0)`).join(' + ') || '0';
-
-    const collectionsRes = await client.query(`
+    const collectionsRes = await pool.query(`
       WITH PaymentDemographics AS (
         SELECT 
           CASE WHEN notes IS NOT NULL AND notes LIKE '{%' THEN notes::json->>'hall_code' ELSE NULL END as hall_code,
@@ -56,12 +45,12 @@ export async function GET() {
         FROM payment p
         LEFT JOIN hall_name_code h ON h."ABD" = (CASE WHEN p.notes IS NOT NULL AND p.notes LIKE '{%' THEN p.notes::json->>'hall_code' ELSE NULL END)
         WHERE p.status IN ('captured', 'Success')
-        AND (CASE WHEN p.notes IS NOT NULL AND p.notes LIKE '{%' THEN p.notes::json->>'type' ELSE NULL END) IN ('Admission Form Fee', 'Admission Fee', 'Continuation Fee')
       ),
       HallCollections AS (
         SELECT 
           hall_code,
-          COUNT(*) as student_count
+          COUNT(*) as student_count,
+          SUM(amount) as total_collected
         FROM PaymentDemographics
         GROUP BY 1
       ),
@@ -102,37 +91,19 @@ export async function GET() {
       SELECT 
         hc.hall_code as code,
         hc.student_count as "studentCount",
-        (${totalCatCSql}) as "totalCollected",
+        hc.total_collected as "totalCollected",
         COALESCE(h."Abdullah Hall", 'Unknown Hall') as name,
         COALESCE(h."Girls", 'Unknown') as gender,
         ${selectCatC_Final}
       FROM HallCollections hc
       LEFT JOIN hall_name_code h ON h."ABD" = hc.hall_code
       LEFT JOIN MergedBreakup mb ON mb.hall_code = hc.hall_code
-      ORDER BY "totalCollected" DESC
+      ORDER BY hc.total_collected DESC
     `);
-
-    const genderObj = {};
-    collectionsRes.rows.forEach(row => {
-      const g = row.gender || 'Unknown';
-      genderObj[g] = (genderObj[g] || 0) + Number(row.totalCollected || 0);
-    });
-    const genderSummaryRows = Object.keys(genderObj).map(k => ({
-      gender: k,
-      total_collected: genderObj[k]
-    }));
-
-    return NextResponse.json({
-      success: true,
-      hallMaster: halls,
-      data: collectionsRes.rows,
-      genderSummary: genderSummaryRows,
-      categoryCHeads: categoryCHeads
-    });
-  } catch (error) {
-    console.error('Hall-wise API Error:', error);
-    return NextResponse.json({ error: 'Failed to generate hall-wise report', details: error.message, stack: error.stack }, { status: 500 });
-  } finally {
-    client.release();
+    console.log(collectionsRes.rows);
+  } catch(e) {
+    console.error(e.message);
   }
+  process.exit(0);
 }
+run();
